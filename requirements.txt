@@ -1,0 +1,14 @@
+# Base web app framework
+streamlit >= 1.22.0
+
+# Data manipulation
+pandas >= 1.5.3
+numpy >= 1.24.3
+
+# Visualization
+matplotlib >= 3.7.1
+seaborn >= 0.12.2
+
+# Machine Learning
+scikit-learn >= 1.2.2
+scikit-multilearn >= 0.2.0
