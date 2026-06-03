@@ -1,234 +1,50 @@
+from utils.data_loader import load_data
 import streamlit as st
-import pandas as pd
-import matplotlib.pyplot as plt
-import json
-import os
-from collections import Counter
 
-st.title("📊 Dataset Explorer")
-
-# ==========================================
-# LOAD DATASET
-# ==========================================
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-train_path = os.path.join(ROOT_DIR, "data", "data_train_bilou.jsonl")
-val_path = os.path.join(ROOT_DIR, "data", "data_val_bilou.jsonl")
-test_path = os.path.join(ROOT_DIR, "data", "data_test_bilou.jsonl")
-
-
-@st.cache_data
-def load_dataset():
-
-    train_df = pd.read_json(train_path, lines=True)
-    val_df = pd.read_json(val_path, lines=True)
-    test_df = pd.read_json(test_path, lines=True)
-
-    train_df["split"] = "Train"
-    val_df["split"] = "Validation"
-    test_df["split"] = "Test"
-
-    return pd.concat(
-        [train_df, val_df, test_df],
-        ignore_index=True
-    )
-
-
-df = load_dataset()
-
-# ==========================================
-# DATASET OVERVIEW
-# ==========================================
-st.subheader("Dataset Overview")
-
-st.write(f"Number of samples : {df.shape[0]}")
-st.write(f"Number of features : {df.shape[1]}")
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.metric("Train", (df["split"] == "Train").sum())
-
-with col2:
-    st.metric("Validation", (df["split"] == "Validation").sum())
-
-with col3:
-    st.metric("Test", (df["split"] == "Test").sum())
-
-# ==========================================
-# SAMPLE DATA
-# ==========================================
-st.subheader("Sample Data")
-
-preview_df = df.copy()
-
-if "tokens" in preview_df.columns:
-
-    preview_df["Review"] = preview_df["tokens"].apply(
-        lambda x: " ".join(x)
-        if isinstance(x, list)
-        else str(x)
-    )
-
-    st.dataframe(
-        preview_df[["Review", "split"]].head(10),
-        use_container_width=True,
-        hide_index=True
-    )
-
-# ==========================================
-# LABEL DISTRIBUTION
-# ==========================================
-st.subheader("Label Distribution")
-
-aspect_counter = Counter()
-sentiment_counter = Counter()
-prefix_counter = Counter()
-
-for labels in df["labels"]:
-
-    for label in labels:
-
-        if label == "O":
-            prefix_counter["O"] += 1
-            continue
-
-        prefix, entity = label.split("-", 1)
-
-        prefix_counter[prefix] += 1
-
-        if "_" in entity:
-
-            aspect = "_".join(entity.split("_")[:-1])
-            sentiment = entity.split("_")[-1]
-
-            aspect_counter[aspect] += 1
-            sentiment_counter[sentiment] += 1
-
-# ==========================================
-# 3 CHARTS
-# ==========================================
-cols = st.columns(3)
-
-with cols[0]:
-
-    st.markdown("#### Aspect Distribution")
-
-    fig, ax = plt.subplots()
-
-    ax.bar(
-        aspect_counter.keys(),
-        aspect_counter.values()
-    )
-
-    plt.xticks(rotation=45)
-
-    st.pyplot(fig)
-
-with cols[1]:
-
-    st.markdown("#### Sentiment Distribution")
-
-    fig, ax = plt.subplots()
-
-    ax.bar(
-        sentiment_counter.keys(),
-        sentiment_counter.values()
-    )
-
-    st.pyplot(fig)
-
-with cols[2]:
-
-    st.markdown("#### BILOU Distribution")
-
-    fig, ax = plt.subplots()
-
-    ax.bar(
-        prefix_counter.keys(),
-        prefix_counter.values()
-    )
-
-    st.pyplot(fig)
-
-# ==========================================
-# SAMPLE REVIEWS BY ASPECT
-# ==========================================
-st.subheader("Sample Reviews by Aspect")
-
-available_aspects = sorted(list(aspect_counter.keys()))
-
-selected_aspect = st.selectbox(
-    "Choose aspect:",
-    available_aspects
+# Set page configuration (MUST be the first Streamlit command)
+st.set_page_config(
+    page_title="Multi-label Text Classification",
+    layout="wide"
 )
 
-examples = []
+# Now we can import other modules and set up session state
 
-for _, row in df.iterrows():
+# Initialize session state variables
+if 'trained_model' not in st.session_state:
+    st.session_state.trained_model = None
+if 'vectorizer' not in st.session_state:
+    st.session_state.vectorizer = None
+if 'model_name' not in st.session_state:
+    st.session_state.model_name = None
+if 'label_columns' not in st.session_state:
+    st.session_state.label_columns = None
 
-    labels = row["labels"]
+# Load data
+if 'df' not in st.session_state:
+    st.session_state.df = load_data()
 
-    found = False
+# Add title and description
+st.title("Automotive Reviews Multi-label Text Classification")
+st.markdown("Multi-label classification for automotive reviews across different aspects: fuel, machine, and parts.")
 
-    for lbl in labels:
+# Main page content
+st.write("""
+## Welcome to the Multi-label Text Classification App
+         
+This application demonstrates text classification that can predict multiple labels simultaneously.
 
-        if selected_aspect in lbl:
-            found = True
-            break
+### Available Pages:
 
-    if found:
+1. **Dataset Explorer** - Explore and understand the dataset
+2. **Model Training** - Train and evaluate multi-label classification models
+3. **Prediction** - Make predictions on new text inputs
 
-        if "tokens" in row:
-            examples.append(
-                " ".join(row["tokens"])
-            )
+Use the sidebar to navigate between pages.
+""")
 
-    if len(examples) >= 9:
-        break
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-
-    st.write("#### Example 1-3")
-
-    for text in examples[:3]:
-        st.write(f"- {text}")
-
-with col2:
-
-    st.write("#### Example 4-6")
-
-    for text in examples[3:6]:
-        st.write(f"- {text}")
-
-with col3:
-
-    st.write("#### Example 7-9")
-
-    for text in examples[6:9]:
-        st.write(f"- {text}")
-
-# ==========================================
-# ANNOTATION EXAMPLES
-# ==========================================
-st.subheader("Annotation Examples")
-
-for i in range(min(5, len(df))):
-
-    row = df.iloc[i]
-
-    with st.container(border=True):
-
-        st.write(f"### Data {i+1}")
-
-        st.write(
-            " ".join(row["tokens"])
-        )
-
-        st.code(
-            " | ".join(row["labels"])
-        )
-
-        st.caption(row["split"])
+# Show dataset overview
+st.subheader("Dataset Overview")
+df = st.session_state.df
+st.write(f"Number of samples: {df.shape[0]}")
+st.write(f"Number of features: {df.shape[1]}")
+st.dataframe(df.head(5))
